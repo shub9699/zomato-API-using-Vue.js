@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Foody</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+  <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <style>
+    [v-cloak] {
+      display: none;
+    }
+    #message{ height: 100%; left: 50%; position: fixed; top: 50%; width: 100%; }
+    #banner{padding:30px;background-color:#cb212e;color:white;background-position:right;background-repeat: no-repeat;background-size: 100%;background-image: url('./images/download.jpg');border-bottom: 2px solid #FFFFFF;}
+    #formatresult{text-align:center;color:#FFFFFF;border-bottom: 2px solid #FFCE00;border-top: 2px solid #FFCE00;margin-bottom: 10px}
+    #searchresult{border-bottom: 1px solid #FFCE00;padding: 10px}
+    #historyresult{border-bottom: 1px solid #FFFFFF;}
+    #body{ width:100%;height:100%;position:absolute;background-attachment:fixed;background-position:auto;background-repeat: no-repeat;background-size:100%;background-image: url("./images/bodybg.jpeg");}
+    #opacbody{padding:40px;background-color:rgba(0, 0, 0, 0.7);border: 1px solid black;filter: alpha(opacity=70);}
+    #opacbox{padding-left : 5px;padding-right : 100px; color: white;}
+  </style>
+</head>
+<body>
+  <div id="zomato" v-cloak>
+    <div id="banner">
+      <div class="container">
+        <div class="row">
+          <banner-component v-bind:appname="appname"></banner-component>
+        </div>
+      </div>
+    </div>
+    <div v-cloak id='body'>
+    <div id='opacbody'>
+      <div class="row">
+        <div class="col-md-8">
+          <div v-show="!isDisplay">
+            <div class="input-group">
+              <input v-model="searchedRestro" class="form-control col-5" placeholder="Enter Restaurant" v-on:keyup="removeisFoundMsg" style="margin-right: 15px">
+              <button v-on:click="searchRestro" class="btn btn-danger">Search</button>
+            </div> 
+          </div> 
+          <div v-show="isEmpty" style='color:#FFFFFF'>
+            Restaurant name cannot be empty!
+          </div>      
+          <br>    
+          <p v-if="isFound" style='color:#FFFFFF'>
+            Sorry, <code style='color:#FFCE00'>'{{searchedRestro}}'</code> not found!
+          </p>
+          <p id="message" v-if="isLoading && !isFound">
+            <img src='./images/loading4.gif' style="width:100px; height:100;">
+          </p>         
+          <div v-if="restaurants && !isLoading && !isDisplay"  id='opacbox'>
+           <div v-for="item in restaurants" id='searchresult'>
+            <h5><a v-on:click="restroDetails(item.restaurant.id)" href="javascript:;" style='color:#FFFFFF'>{{item.restaurant.name}}</a></h5>
+            <span>- {{item.restaurant.location.address}}</span>
+           </div>
+          </div>      
+          <div v-if="isDisplay" class="col-lg" style='color:#FFFFFF'>
+            <result-component v-bind:details='details'></result-component>
+            <center><button v-on:click="searchAgain(false)" class="btn btn-danger">Search Again</button></center>
+          </div>
+        </div>
+
+
+        <div class="card" style="width: 18rem;" >
+          <img class="card-img-top" src="https://images.pexels.com/photos/704569/pexels-photo-704569.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500" alt="Card image cap">
+          <div class="card-body">
+            <h5 class="card-title">We Cook Delicious Food</h5>
+            <p class="card-text">Search for some Exotic Restaurants.</p>
+            <a href="#" class="btn btn-primary" style="width: 10rem; align-items: center;">Go</a>
+          </div>
+        </div>
+        
+        </div>
+      </div>
+      </div>
+     </div>
+    </div>
+  <script type="text/javascript" src="https://unpkg.com/vue@2.5.15/dist/vue.min.js"></script>
+  <script type="text/javascript" src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <script type="text/javascript" src="https://unpkg.com/socket.io-client@2.1.0/dist/socket.io.js"></script> <!-- added -->
+</body>
+</html>
+
+<script>
+// topTemplate Component
+const bannerComponent = {
+    template: `<div class="col-lg">
+                     <h1 class="display-2">{{appname}}</h1>
+                     <p class="lead">Restaurant Finder</p>
+                </div>`,
+    props: ['appname']
+}
+
+// Details of the restaurant.
+const resultComponent = {
+    template: `<div>
+                <center>
+                    <img v-bind:src='details.photos_url' width="20%" height="20%">  
+                    <h4>{{details.restroname}}</h4>
+                </center><br>
+                <div id="formatresult">
+                    <p>Address : {{details.restroaddress}}</p>
+                    <p>Cuisines: {{details.cuisine}}</p>
+                    <p>Ratings: {{details.rating}}. ({{details.restrorating}}/5 based on {{details.restrovotes}} votes)</p>
+                    <a v-bind:href='details.menu_url' target="_blank" style='color:#ffffff'>Menu</a>
+                </div>
+                </div>`,
+    props: ['details']
+}
+
+const socket = io()
+const zomato = new Vue({
+    el: '#zomato',
+    data: {
+        appname: 'Foody',
+        searchedRestro:'',
+        restaurants: [],
+        selectedRestro:{},  
+        isLoading: false,
+        isFound: false,
+        isEmpty: false,
+        isDisplay: false,      
+        details : {"restroname":""}
+    },
+    methods: {
+        searchRestro: function () {
+            if(this.searchedRestro.trim()){
+                const vm = this
+                this.isLoading = true
+                axios.get('zomatoApi' + vm.searchedRestro)
+                .then(response => {
+                    if(response == null || response.data.restaurants.length==0){
+                        vm.isFound = true;                            
+                    }
+                })
+            }else{    
+                this.isEmpty = true;
+            }
+        },
+        restroDetails: function (id) {
+            const vm = this
+            this.isLoading = true
+            this.isDisplay = true
+            axios.post(`/api/details`, {
+                id
+            })
+            .then(response => {
+                vm.isLoading=false
+                vm.details.restroname = response.data.name;
+                vm.details.restroaddress = response.data.location.address;
+                vm.details.cuisine = response.data.cuisines?response.data.cuisines:'De';
+                vm.details.rating = response.data.user_rating.rating_text;
+                vm.details.restrorating = response.data.user_rating.aggregate_rating;
+                vm.details.restrovotes = response.data.user_rating.votes;
+                vm.details.menu_url = response.data.menu_url;
+                if(response.data.thumb!=='')  
+                    vm.details.photos_url = response.data.thumb;
+                else
+                    vm.details.photos_url = 'https://smedia2.intoday.in/btmt/images/stories/zomato-fact-sheet_660_052417055850_111517063712.jpg';
+            })
+        },
+        
+        searchAgain: function (flag) {
+            this.isDisplay= false
+            this.isFound = false;
+            this.isEmpty = false;
+            this.isLoading = flag;
+            this.restaurants=[]
+            this.searchedRestro=''
+        },
+        removeisFoundMsg: function () {
+            this.isFound = false;
+            this.isEmpty = false;
+            this.isLoading = false;
+            this.restaurants=[]
+        },
+        clearhistory: function () {
+            this.searchHistory = [];
+            socket.emit('clearHistory')
+        }
+    },
+    components: {
+        'banner-component': bannerComponent,
+        'result-component': resultComponent
+    }
+})
+
+
+
+</script>
